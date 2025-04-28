@@ -712,8 +712,12 @@ public class MainInterface extends BorderPane {
                 html.append("    body { font-family: Arial, sans-serif; margin: 20px; }\n");
                 html.append("    h1 { color: #333; }\n");
                 html.append("    .content { line-height: 1.6; }\n");
-                html.append("    .table-placeholder { background-color: #f0f0f0; padding: 10px; margin: 10px 0; border-radius: 5px; }\n");
-                html.append("    .image-placeholder { background-color: #e0e0e0; padding: 10px; margin: 10px 0; border-radius: 5px; }\n");
+                html.append("    table { border-collapse: collapse; margin: 15px 0; }\n");
+                html.append("    table, th, td { border: 1px solid #ddd; }\n");
+                html.append("    th, td { padding: 8px; text-align: left; }\n");
+                html.append("    .table-container { margin: 20px 0; }\n");
+                html.append("    .image-container { margin: 20px 0; }\n");
+                html.append("    .image-container img { max-width: 100%; }\n");
                 html.append("  </style>\n");
                 html.append("</head>\n");
                 html.append("<body>\n");
@@ -724,17 +728,108 @@ public class MainInterface extends BorderPane {
                 String content = page.getContent();
                 String[] lines = content.split("\\n");
                 
+                // First, let's log what we're working with for debugging
+                System.out.println("Exporting page: " + page.getId() + " - " + page.getTitle());
+                System.out.println("Content: " + content);
+                
+                // Process regular content first
+                for (String line : lines) {
+                    if (!line.matches("\\[TABLE_\\d+\\]") && !line.matches("\\[IMAGE_\\d+\\]")) {
+                        html.append("    ").append(line).append("<br>\n");
+                    }
+                }
+                
+                // Process tables
                 for (String line : lines) {
                     if (line.matches("\\[TABLE_\\d+\\]")) {
-                        // Extract table ID
-                        String tableIdStr = line.substring(7, line.length() - 1);
-                        html.append("    <div class=\"table-placeholder\">Table " + tableIdStr + " would be rendered here</div>\n");
-                    } else if (line.matches("\\[IMAGE_\\d+\\]")) {
-                        // Extract image ID
-                        String imageIdStr = line.substring(7, line.length() - 1);
-                        html.append("    <div class=\"image-placeholder\">Image " + imageIdStr + " would be rendered here</div>\n");
-                    } else {
-                        html.append("    ").append(line).append("<br>\n");
+                        try {
+                            // Extract table ID
+                            String tableIdStr = line.substring(7, line.length() - 1);
+                            Long tableId = Long.parseLong(tableIdStr);
+                            System.out.println("Processing table ID: " + tableId);
+                            
+                            // Get the table from the service
+                            TableDto tableDto = tableService.getTable(tableId);
+                            
+                            if (tableDto != null) {
+                                System.out.println("Found table with ID: " + tableDto.getId());
+                                String[][] data = tableDto.getData();
+                                if (data != null && data.length > 0) {
+                                    System.out.println("Table dimensions: " + data.length + "x" + (data[0].length));
+                                    
+                                    // Start table container
+                                    html.append("    <div class=\"table-container\">\n");
+                                    html.append("      <h3>Table " + tableId + "</h3>\n");
+                                    html.append("      <table>\n");
+                                    
+                                    // Generate table HTML
+                                    for (int row = 0; row < data.length; row++) {
+                                        html.append("        <tr>\n");
+                                        for (int col = 0; col < data[row].length; col++) {
+                                            String cellContent = data[row][col] != null ? data[row][col] : "";
+                                            html.append("          <td>" + cellContent + "</td>\n");
+                                        }
+                                        html.append("        </tr>\n");
+                                    }
+                                    
+                                    // Close table
+                                    html.append("      </table>\n");
+                                    html.append("    </div>\n");
+                                } else {
+                                    System.out.println("Table data is null or empty");
+                                    html.append("    <div class=\"table-placeholder\">Table " + tableId + " has no data</div>\n");
+                                }
+                            } else {
+                                System.out.println("Table not found: " + tableId);
+                                html.append("    <div class=\"table-placeholder\">Table " + tableId + " not found</div>\n");
+                            }
+                        } catch (Exception e) {
+                            e.printStackTrace();
+                            String tableIdStr = line.substring(7, line.length() - 1);
+                            html.append("    <div class=\"table-placeholder\">Error loading Table " + tableIdStr + ": " + e.getMessage() + "</div>\n");
+                        }
+                    }
+                }
+                
+                // Process images
+                for (String line : lines) {
+                    if (line.matches("\\[IMAGE_\\d+\\]")) {
+                        try {
+                            // Extract image ID
+                            String imageIdStr = line.substring(7, line.length() - 1);
+                            Long imageId = Long.parseLong(imageIdStr);
+                            System.out.println("Processing image ID: " + imageId);
+                            
+                            // Get the image from the service
+                            ImageDto imageDto = imageService.getImage(imageId);
+                            
+                            if (imageDto != null && imageDto.getImageData() != null) {
+                                System.out.println("Found image with ID: " + imageDto.getId() + ", size: " + imageDto.getImageData().length + " bytes");
+                                
+                                // Create a temporary file to store the image
+                                String imgFileName = "image_" + imageId + "_" + imageDto.getFileName();
+                                String imgFilePath = selectedDirectory.getAbsolutePath() + File.separator + imgFileName;
+                                System.out.println("Saving image to: " + imgFilePath);
+                                
+                                // Write the image to the file
+                                try (FileOutputStream imgFos = new FileOutputStream(imgFilePath)) {
+                                    imgFos.write(imageDto.getImageData());
+                                }
+                                
+                                // Add the image to HTML with a relative path
+                                html.append("    <div class=\"image-container\">\n");
+                                html.append("      <h3>Image: " + imageDto.getFileName() + "</h3>\n");
+                                html.append("      <img src=\"" + imgFileName + "\" alt=\"" + imageDto.getFileName() + "\">\n");
+                                html.append("    </div>\n");
+                            } else {
+                                System.out.println("Image not found or has no data: " + imageId);
+                                html.append("    <div class=\"image-placeholder\">Image " + imageId + " not found</div>\n");
+                            }
+                        } catch (Exception e) {
+                            e.printStackTrace();
+                            String imageIdStr = line.substring(7, line.length() - 1);
+                            html.append("    <div class=\"image-placeholder\">Error loading Image " + imageIdStr + ": " + e.getMessage() + "</div>\n");
+                        }
                     }
                 }
                 
@@ -745,6 +840,14 @@ public class MainInterface extends BorderPane {
                 // Write to file
                 try (FileOutputStream fos = new FileOutputStream(exportPath)) {
                     fos.write(html.toString().getBytes());
+                }
+                
+                // Open the exported file in the default browser
+                try {
+                    File htmlFile = new File(exportPath);
+                    java.awt.Desktop.getDesktop().browse(htmlFile.toURI());
+                } catch (Exception e) {
+                    System.out.println("Could not open browser: " + e.getMessage());
                 }
                 
                 showInfo("Page exported successfully to: " + exportPath);
