@@ -13,11 +13,17 @@ import javafx.scene.control.*;
 import javafx.scene.layout.*;
 import javafx.geometry.Insets;
 import javafx.util.Pair;
+import javafx.scene.control.TreeView;
+import javafx.scene.control.cell.TextFieldTreeCell;
+import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.VBox;
+import javafx.stage.DirectoryChooser;
+import javafx.scene.Node;
+import javafx.scene.Parent;
+import javafx.stage.FileChooser;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import java.io.ByteArrayInputStream;
-import javafx.stage.FileChooser;
-import javafx.stage.DirectoryChooser;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -682,7 +688,120 @@ public class MainInterface extends BorderPane {
         }
         
         Long pageId = tabToPageIdMap.get(selectedTab);
-        PageDto page = pagesMap.get(pageId);
+        
+        // First, find the TextArea in the tab to get the current content
+        TextArea editor = null;
+        try {
+            ScrollPane scrollPane = (ScrollPane) selectedTab.getContent();
+            if (scrollPane != null && scrollPane.getContent() instanceof VBox) {
+                VBox contentBox = (VBox) scrollPane.getContent();
+                System.out.println("Content box children: " + contentBox.getChildren().size());
+                
+                // Recursively search for the TextArea
+                editor = findTextArea(contentBox);
+                
+                if (editor == null) {
+                    System.out.println("Could not find TextArea in the tab content");
+                    // Try another approach - look directly at the tab content
+                    for (Node node : contentBox.getChildren()) {
+                        System.out.println("Child node: " + node.getClass().getName());
+                    }
+                }
+            } else {
+                System.out.println("ScrollPane content is not a VBox: " + 
+                    (scrollPane != null ? scrollPane.getContent().getClass().getName() : "null"));
+            }
+        } catch (Exception e) {
+            System.out.println("Error finding TextArea: " + e.getMessage());
+            e.printStackTrace();
+        }
+        
+        // Get the current content directly from the editor
+        String currentContent = null;
+        
+        try {
+            if (editor != null) {
+                // Get content directly from the editor we found
+                currentContent = editor.getText();
+                System.out.println("Found editor content: " + 
+                    (currentContent.length() > 50 ? currentContent.substring(0, 50) + "..." : currentContent));
+            } else {
+                System.out.println("Could not find editor through recursive search");
+                
+                // Try to find the editor directly in the tab's content structure
+                ScrollPane scrollPane = (ScrollPane) selectedTab.getContent();
+                if (scrollPane != null && scrollPane.getContent() instanceof VBox) {
+                    VBox contentBox = (VBox) scrollPane.getContent();
+                    for (Node node : contentBox.getChildren()) {
+                        if (node instanceof TextArea) {
+                            TextArea directEditor = (TextArea) node;
+                            currentContent = directEditor.getText();
+                            System.out.println("Found editor content directly: " + 
+                                (currentContent.length() > 50 ? currentContent.substring(0, 50) + "..." : currentContent));
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            // If we found content, save it to the database
+            if (currentContent != null) {
+                PageDto currentPage = pageService.getPage(pageId);
+                if (currentPage != null) {
+                    PageDto updatedPage = pageService.updatePage(pageId, currentPage.getTitle(), currentContent);
+                    if (updatedPage != null) {
+                        // Update our local cache
+                        pagesMap.put(pageId, updatedPage);
+                        System.out.println("Page content updated successfully");
+                    } else {
+                        System.out.println("Failed to update page content");
+                    }
+                }
+            } else {
+                System.out.println("Could not find any editor content to save");
+            }
+        } catch (Exception e) {
+            System.out.println("Error getting/saving content: " + e.getMessage());
+            e.printStackTrace();
+        }
+        
+        // Get the page data from the database to ensure we have all tables and images
+        PageDto page = pageService.getPage(pageId);
+        
+        // If we found current content in the editor, update the page content but keep all other data
+        if (currentContent != null && page != null) {
+            System.out.println("Using current editor content for export");
+            
+            // Create a new instance with the current content using builder pattern
+            // but keep all the other data from the database (tables, images, etc.)
+            page = PageDto.builder()
+                    .id(page.getId())
+                    .title(page.getTitle())
+                    .content(currentContent) // Use the current content from the editor
+                    .notebookId(page.getNotebookId())
+                    .createdAt(page.getCreatedAt())
+                    .tables(page.getTables())
+                    .graphs(page.getGraphs())
+                    .build();
+            
+            // Also update the database with the current content
+            try {
+                PageDto updatedPage = pageService.updatePage(pageId, page.getTitle(), currentContent);
+                if (updatedPage != null) {
+                    System.out.println("Updated database with current content before export");
+                    // But still use our custom page with the current content for the export
+                }
+            } catch (Exception e) {
+                System.out.println("Error updating database: " + e.getMessage());
+                // Continue with export using our custom page
+            }
+        } else if (page == null) {
+            System.out.println("Page not found in database, using cached version");
+            // Fallback to cache if database retrieval failed
+            page = pagesMap.get(pageId);
+        } else {
+            System.out.println("Using database version of page for export");
+        }
         
         if (page == null) {
             showError("Page data not found");
@@ -730,7 +849,20 @@ public class MainInterface extends BorderPane {
                 
                 // First, let's log what we're working with for debugging
                 System.out.println("Exporting page: " + page.getId() + " - " + page.getTitle());
-                System.out.println("Content: " + content);
+                System.out.println("Content length: " + (content != null ? content.length() : 0) + " characters");
+                System.out.println("Content preview: " + 
+                    (content != null && content.length() > 0 ? 
+                        (content.length() > 100 ? content.substring(0, 100) + "..." : content) : 
+                        "<empty>"));
+                
+                // Also log any table or image markers in the content
+                if (content != null) {
+                    for (String line : lines) {
+                        if (line.matches("\\[TABLE_\\d+\\]") || line.matches("\\[IMAGE_\\d+\\]")) {
+                            System.out.println("Found marker in content: " + line);
+                        }
+                    }
+                }
                 
                 // Process regular content first
                 for (String line : lines) {
@@ -947,5 +1079,27 @@ public class MainInterface extends BorderPane {
         alert.setHeaderText(null);
         alert.setContentText(message);
         alert.showAndWait();
+    }
+    
+    /**
+     * Recursively searches for a TextArea within a parent node
+     * @param parent The parent node to search within
+     * @return The first TextArea found, or null if none is found
+     */
+    private TextArea findTextArea(Parent parent) {
+        if (parent == null) return null;
+        
+        for (Node node : parent.getChildrenUnmodifiable()) {
+            if (node instanceof TextArea) {
+                return (TextArea) node;
+            } else if (node instanceof Parent) {
+                TextArea found = findTextArea((Parent) node);
+                if (found != null) {
+                    return found;
+                }
+            }
+        }
+        
+        return null;
     }
 }
