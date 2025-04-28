@@ -13,6 +13,9 @@ import javafx.scene.control.*;
 import javafx.scene.layout.*;
 import javafx.geometry.Insets;
 import javafx.util.Pair;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
+import java.io.ByteArrayInputStream;
 import javafx.stage.FileChooser;
 import javafx.stage.DirectoryChooser;
 import java.io.File;
@@ -160,33 +163,169 @@ public class MainInterface extends BorderPane {
     }
 
     private void openPage(PageDto page) {
+        // Debug information
+        System.out.println("Opening page: " + page.getId() + " - " + page.getTitle());
+        System.out.println("Page content: " + page.getContent());
+        
+        // Get the latest page data
+        final Long pageId = page.getId();
+        PageDto finalPage = page; // Default to original page
+        try {
+            PageDto refreshedPage = pageService.getPage(pageId);
+            finalPage = refreshedPage; // Only assign if successful
+            System.out.println("Successfully refreshed page data");
+        } catch (Exception e) {
+            System.out.println("Error refreshing page data: " + e.getMessage());
+            // Keep using the original page if refresh fails
+        }
+        
+        // Debug table information
+        if (finalPage.getTables() != null) {
+            System.out.println("Tables count: " + finalPage.getTables().size());
+            for (TableDto table : finalPage.getTables()) {
+                System.out.println("Table ID: " + table.getId());
+                String[][] data = table.getData();
+                if (data != null) {
+                    System.out.println("Table data dimensions: " + data.length + "x" + (data.length > 0 ? data[0].length : 0));
+                } else {
+                    System.out.println("Table data is null");
+                }
+            }
+        } else {
+            System.out.println("Tables collection is null");
+        }
+        
         // Check if page is already open
         for (Tab tab : editorTabs.getTabs()) {
-            if (tabToPageIdMap.containsKey(tab) && tabToPageIdMap.get(tab).equals(page.getId())) {
+            if (tabToPageIdMap.containsKey(tab) && tabToPageIdMap.get(tab).equals(pageId)) {
                 editorTabs.getSelectionModel().select(tab);
                 return;
             }
         }
         
         // Create new tab for page
-        Tab tab = new Tab(page.getTitle());
-        TextArea editor = new TextArea(page.getContent());
-        editor.setWrapText(true);
+        final Tab tab = new Tab(finalPage.getTitle());
         
-        // Add save button
-        Button saveButton = new Button("Save");
-        saveButton.setOnAction(e -> savePage(page.getId(), editor.getText()));
+        // Create a scrollable container for the page content
+        final ScrollPane scrollPane = new ScrollPane();
+        scrollPane.setFitToWidth(true);
         
-        VBox pageContent = new VBox(10);
+        // Main content container
+        final VBox pageContent = new VBox(10);
         pageContent.setPadding(new Insets(10));
+        
+        // Add save button and text editor
+        final Button saveButton = new Button("Save");
+        final TextArea editor = new TextArea(finalPage.getContent());
+        editor.setWrapText(true);
+        saveButton.setOnAction(e -> savePage(pageId, editor.getText()));
+        
+        // Add the editor and save button to the page content
         pageContent.getChildren().addAll(saveButton, editor);
         
-        tab.setContent(pageContent);
+        // Process the content to find table and image markers
+        final String content = finalPage.getContent();
+        if (content != null && !content.isEmpty()) {
+            String[] lines = content.split("\\n");
+            
+            for (String line : lines) {
+                // Process table markers
+                if (line.matches("\\[TABLE_\\d+\\]")) {
+                    try {
+                        // Extract table ID
+                        final Long tableId = Long.parseLong(line.substring(7, line.length() - 1));
+                        System.out.println("Found table marker for ID: " + tableId);
+                        
+                        // Get the table from the service
+                        final TableDto tableDto = tableService.getTable(tableId);
+                        
+                        if (tableDto != null) {
+                            System.out.println("Retrieved table with ID: " + tableDto.getId());
+                            
+                            // Create a grid pane for the table
+                            final GridPane tableGrid = new GridPane();
+                            tableGrid.setHgap(5);
+                            tableGrid.setVgap(5);
+                            tableGrid.setPadding(new Insets(10));
+                            tableGrid.setStyle("-fx-border-color: #cccccc; -fx-background-color: #f5f5f5;");
+                            
+                            // Get table data
+                            final String[][] data = tableDto.getData();
+                            if (data != null && data.length > 0) {
+                                for (int row = 0; row < data.length; row++) {
+                                    for (int col = 0; col < data[row].length; col++) {
+                                        final TextField cell = new TextField(data[row][col]);
+                                        cell.setPrefWidth(100);
+                                        tableGrid.add(cell, col, row);
+                                    }
+                                }
+                            }
+                            
+                            // Add the table to the page content
+                            final VBox tableContainer = new VBox(5);
+                            final Label tableLabel = new Label("Table " + tableDto.getId());
+                            tableContainer.getChildren().addAll(tableLabel, tableGrid);
+                            pageContent.getChildren().add(tableContainer);
+                        }
+                    } catch (Exception e) {
+                        System.out.println("Error rendering table: " + e.getMessage());
+                        e.printStackTrace();
+                        // Add a placeholder for the table
+                        final Label errorLabel = new Label("Error loading table: " + line);
+                        errorLabel.setStyle("-fx-text-fill: red;");
+                        pageContent.getChildren().add(errorLabel);
+                    }
+                }
+                
+                // Process image markers
+                else if (line.matches("\\[IMAGE_\\d+\\]")) {
+                    try {
+                        // Extract image ID
+                        final Long imageId = Long.parseLong(line.substring(7, line.length() - 1));
+                        System.out.println("Found image marker for ID: " + imageId);
+                        
+                        // Get the image from the service
+                        final ImageDto imageDto = imageService.getImage(imageId);
+                        
+                        if (imageDto != null && imageDto.getImageData() != null) {
+                            System.out.println("Retrieved image with ID: " + imageDto.getId() + ", size: " + imageDto.getImageData().length + " bytes");
+                            
+                            // Create an image view
+                            final Image image = new Image(new ByteArrayInputStream(imageDto.getImageData()));
+                            final ImageView imageView = new ImageView(image);
+                            imageView.setFitWidth(400); // Set a reasonable default width
+                            imageView.setPreserveRatio(true);
+                            
+                            // Add the image to the page content
+                            final VBox imageContainer = new VBox(5);
+                            final Label imageLabel = new Label("Image: " + imageDto.getFileName());
+                            imageContainer.getChildren().addAll(imageLabel, imageView);
+                            pageContent.getChildren().add(imageContainer);
+                        }
+                    } catch (Exception e) {
+                        System.out.println("Error rendering image: " + e.getMessage());
+                        e.printStackTrace();
+                        // Add a placeholder for the image
+                        final Label errorLabel = new Label("Error loading image: " + line);
+                        errorLabel.setStyle("-fx-text-fill: red;");
+                        pageContent.getChildren().add(errorLabel);
+                    }
+                }
+            }
+        }
+        
+        // Set the content of the scroll pane
+        scrollPane.setContent(pageContent);
+        tab.setContent(scrollPane);
         tab.setOnClosed(e -> tabToPageIdMap.remove(tab));
         
-        tabToPageIdMap.put(tab, page.getId());
+        // Add the tab to the tab pane
+        tabToPageIdMap.put(tab, pageId);
         editorTabs.getTabs().add(tab);
         editorTabs.getSelectionModel().select(tab);
+        
+        // Store the page in the pages map
+        pagesMap.put(pageId, finalPage);
     }
 
     private void handleNewNotebook() {
@@ -287,36 +426,36 @@ public class MainInterface extends BorderPane {
         // Simple dialog for table dimensions
         Dialog<Pair<Integer, Integer>> dialog = new Dialog<>();
         dialog.setTitle("Create Table");
-        dialog.setHeaderText("Specify table dimensions");
+        dialog.setHeaderText("Enter table dimensions");
         
         // Set the button types
         ButtonType createButtonType = new ButtonType("Create", ButtonBar.ButtonData.OK_DONE);
         dialog.getDialogPane().getButtonTypes().addAll(createButtonType, ButtonType.CANCEL);
         
-        // Create the rows and columns labels and fields
+        // Create the dimensions inputs
         GridPane grid = new GridPane();
         grid.setHgap(10);
         grid.setVgap(10);
         grid.setPadding(new Insets(20, 150, 10, 10));
         
         TextField rowsField = new TextField();
-        rowsField.setText("3");
-        TextField columnsField = new TextField();
-        columnsField.setText("3");
+        rowsField.setPromptText("Rows");
+        TextField colsField = new TextField();
+        colsField.setPromptText("Columns");
         
         grid.add(new Label("Rows:"), 0, 0);
         grid.add(rowsField, 1, 0);
         grid.add(new Label("Columns:"), 0, 1);
-        grid.add(columnsField, 1, 1);
+        grid.add(colsField, 1, 1);
         
         dialog.getDialogPane().setContent(grid);
         
-        // Convert the result to a pair when the create button is clicked
+        // Convert the result when the create button is clicked
         dialog.setResultConverter(dialogButton -> {
             if (dialogButton == createButtonType) {
                 try {
                     int rows = Integer.parseInt(rowsField.getText());
-                    int cols = Integer.parseInt(columnsField.getText());
+                    int cols = Integer.parseInt(colsField.getText());
                     return new Pair<>(rows, cols);
                 } catch (NumberFormatException e) {
                     return null;
@@ -343,6 +482,7 @@ public class MainInterface extends BorderPane {
                 // Call service to create table
                 try {
                     TableDto newTable = tableService.createTable(pageId, data);
+                    System.out.println("Created table with ID: " + newTable.getId());
                     
                     // Get the current content
                     PageDto page = pagesMap.get(pageId);
@@ -355,18 +495,46 @@ public class MainInterface extends BorderPane {
                     // Update the page content
                     pageService.updatePage(pageId, page.getTitle(), content);
                     
-                    // Refresh the page content in the UI
-                    if (selectedTab.getContent() instanceof TextArea) {
-                        TextArea textArea = (TextArea) selectedTab.getContent();
-                        textArea.setText(content);
+                    // Add the table directly to the UI
+                    if (selectedTab.getContent() instanceof ScrollPane) {
+                        ScrollPane scrollPane = (ScrollPane) selectedTab.getContent();
+                        if (scrollPane.getContent() instanceof VBox) {
+                            VBox pageContent = (VBox) scrollPane.getContent();
+                            
+                            // Create a grid pane for the table
+                            GridPane tableGrid = new GridPane();
+                            tableGrid.setHgap(5);
+                            tableGrid.setVgap(5);
+                            tableGrid.setPadding(new Insets(10));
+                            tableGrid.setStyle("-fx-border-color: #cccccc; -fx-background-color: #f5f5f5;");
+                            
+                            // Populate the table grid
+                            for (int row = 0; row < data.length; row++) {
+                                for (int col = 0; col < data[row].length; col++) {
+                                    TextField cell = new TextField(data[row][col]);
+                                    cell.setPrefWidth(100);
+                                    tableGrid.add(cell, col, row);
+                                }
+                            }
+                            
+                            // Add the table to the page content
+                            VBox tableContainer = new VBox(5);
+                            Label tableLabel = new Label("Table " + newTable.getId());
+                            tableContainer.getChildren().addAll(tableLabel, tableGrid);
+                            pageContent.getChildren().add(tableContainer);
+                        } else {
+                            // If the content structure is unexpected, refresh the page
+                            openPage(pageService.getPage(pageId));
+                        }
                     } else {
-                        // Re-open the page to refresh the content
+                        // If the content structure is unexpected, refresh the page
                         openPage(pageService.getPage(pageId));
                     }
                     
                     showInfo("Table created successfully!");
                 } catch (Exception e) {
                     showError("Error creating table: " + e.getMessage());
+                    e.printStackTrace();
                 }
             }
         });
@@ -436,7 +604,7 @@ public class MainInterface extends BorderPane {
             return;
         }
         
-        Long pageId = tabToPageIdMap.get(selectedTab);
+        final Long pageId = tabToPageIdMap.get(selectedTab);
         
         // Create a file chooser for images
         FileChooser fileChooser = new FileChooser();
@@ -457,6 +625,7 @@ public class MainInterface extends BorderPane {
                 
                 // Save the image
                 ImageDto newImage = imageService.saveImage(pageId, imageData, fileName, contentType);
+                System.out.println("Created image with ID: " + newImage.getId());
                 
                 // Get the current content
                 PageDto page = pagesMap.get(pageId);
@@ -469,20 +638,38 @@ public class MainInterface extends BorderPane {
                 // Update the page content
                 pageService.updatePage(pageId, page.getTitle(), content);
                 
-                // Refresh the page content in the UI
-                if (selectedTab.getContent() instanceof TextArea) {
-                    TextArea textArea = (TextArea) selectedTab.getContent();
-                    textArea.setText(content);
+                // Add the image directly to the UI
+                if (selectedTab.getContent() instanceof ScrollPane) {
+                    ScrollPane scrollPane = (ScrollPane) selectedTab.getContent();
+                    if (scrollPane.getContent() instanceof VBox) {
+                        VBox pageContent = (VBox) scrollPane.getContent();
+                        
+                        // Create an image view
+                        ImageView imageView = new ImageView(new Image(new ByteArrayInputStream(imageData)));
+                        imageView.setFitWidth(400); // Set a reasonable default width
+                        imageView.setPreserveRatio(true);
+                        
+                        // Add the image to the page content
+                        VBox imageContainer = new VBox(5);
+                        Label imageLabel = new Label("Image: " + fileName);
+                        imageContainer.getChildren().addAll(imageLabel, imageView);
+                        pageContent.getChildren().add(imageContainer);
+                    } else {
+                        // If the content structure is unexpected, refresh the page
+                        openPage(pageService.getPage(pageId));
+                    }
                 } else {
-                    // Re-open the page to refresh the content
+                    // If the content structure is unexpected, refresh the page
                     openPage(pageService.getPage(pageId));
                 }
                 
                 showInfo("Image inserted successfully!");
             } catch (IOException e) {
                 showError("Error reading image file: " + e.getMessage());
+                e.printStackTrace();
             } catch (Exception e) {
                 showError("Error inserting image: " + e.getMessage());
+                e.printStackTrace();
             }
         }
     }
