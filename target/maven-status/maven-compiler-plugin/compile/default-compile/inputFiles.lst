@@ -2,13 +2,14 @@
 /Users/tylerlwq/Downloads/java-final/src/main/java/com/notebook/service/NotebookService.java
 /Users/tylerlwq/Downloads/java-final/src/main/java/com/notebook/controller/NotebookController.java
 /Users/tylerlwq/Downloads/java-final/src/main/java/com/notebook/repository/NotebookRepository.java
+/Users/tylerlwq/Downloads/java-final/src/main/java/com/notebook/config/RestTemplateConfig.java
 /Users/tylerlwq/Downloads/java-final/src/main/java/com/notebook/NotebookApplication.java
+/Users/tylerlwq/Downloads/java-final/src/main/java/com/notebook/service/SecurityService.java
+/Users/tylerlwq/Downloads/java-final/src/main/java/com/notebook/config/DevAuthenticationProvider.java
 /Users/tylerlwq/Downloads/java-final/src/main/java/com/notebook/controller/AuthController.java
 /Users/tylerlwq/Downloads/java-final/src/main/java/com/notebook/SimpleLauncher.java
 /Users/tylerlwq/Downloads/java-final/src/main/java/com/notebook/ui/LoginScreen.java
-/Users/tylerlwq/Downloads/java-final/src/main/java/com/notebook/service/DevNotebookService.java
 /Users/tylerlwq/Downloads/java-final/src/main/java/com/notebook/dto/TableDto.java
-/Users/tylerlwq/Downloads/java-final/src/main/java/com/notebook/service/DevPageService.java
 /Users/tylerlwq/Downloads/java-final/src/main/java/com/notebook/service/GraphService.java
 /Users/tylerlwq/Downloads/java-final/src/main/java/com/notebook/ui/RegistrationScreen.java
 /Users/tylerlwq/Downloads/java-final/src/main/java/com/notebook/service/TableService.java
@@ -16,6 +17,7 @@
 /Users/tylerlwq/Downloads/java-final/src/main/java/com/notebook/service/JwtService.java
 /Users/tylerlwq/Downloads/java-final/src/main/java/com/notebook/repository/GraphRepository.java
 /Users/tylerlwq/Downloads/java-final/src/main/java/com/notebook/controller/TableController.java
+/Users/tylerlwq/Downloads/java-final/src/main/java/com/notebook/ui/DebugLoginScreen.java
 /Users/tylerlwq/Downloads/java-final/src/main/java/com/notebook/security/JwtAuthenticationFilter.java
 /Users/tylerlwq/Downloads/java-final/src/main/java/com/notebook/model/DataTable.java
 /Users/tylerlwq/Downloads/java-final/src/main/java/com/notebook/model/User.java
@@ -30,6 +32,8 @@
 /Users/tylerlwq/Downloads/java-final/src/main/java/com/notebook/dto/AuthRequest.java
 /Users/tylerlwq/Downloads/java-final/src/main/java/com/notebook/repository/UserRepository.java
 /Users/tylerlwq/Downloads/java-final/src/main/java/com/notebook/controller/PageController.java
+/Users/tylerlwq/Downloads/java-final/src/main/java/com/notebook/ui/SimpleLauncher.java
+/Users/tylerlwq/Downloads/java-final/src/main/java/com/notebook/config/AuthTokenInterceptor.java
 /Users/tylerlwq/Downloads/java-final/src/main/java/com/notebook/dto/AuthResponse.java
 /Users/tylerlwq/Downloads/java-final/src/main/java/com/notebook/config/SecurityConfig.java
 /Users/tylerlwq/Downloads/java-final/src/main/java/com/notebook/controller/GraphController.java

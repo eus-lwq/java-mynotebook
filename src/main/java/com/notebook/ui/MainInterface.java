@@ -174,20 +174,37 @@ public class MainInterface extends BorderPane {
         TextInputDialog dialog = new TextInputDialog();
         dialog.setTitle("New Notebook");
         dialog.setHeaderText("Create a new notebook");
-        dialog.setContentText("Enter notebook title:");
+        dialog.setContentText("Enter notebook name:");
         
         Optional<String> result = dialog.showAndWait();
-        result.ifPresent(title -> {
-            if (!title.trim().isEmpty()) {
+        result.ifPresent(notebookName -> {
+            if (!notebookName.isEmpty()) {
                 try {
-                    NotebookDto newNotebook = notebookService.createNotebook(title);
-                    if (newNotebook != null) {
-                        loadNotebooks(); // Refresh the tree
-                    } else {
-                        showError("Failed to create notebook");
-                    }
+                    NotebookDto newNotebook = notebookService.createNotebook(notebookName);
+                    notebooksMap.put(newNotebook.getId(), newNotebook);
+                    
+                    TreeItem<Pair<String, Long>> notebookItem = new TreeItem<>(new Pair<>(newNotebook.getTitle(), newNotebook.getId()));
+                    notebookTree.getRoot().getChildren().add(notebookItem);
+                    
+                    // Select the new notebook
+                    notebookTree.getSelectionModel().select(notebookItem);
+                    
+                    // Show success message
+                    showInfo("Notebook '" + notebookName + "' created successfully!");
                 } catch (Exception e) {
-                    showError("Error creating notebook: " + e.getMessage());
+                    e.printStackTrace();
+                    
+                    // Check if it's an authentication error
+                    if (e.getMessage() != null && (e.getMessage().contains("Authentication") || 
+                                                 e.getMessage().contains("authorized") || 
+                                                 e.getMessage().contains("token"))) {
+                        showError("Authentication error. The application will restart so you can log in again.");
+                        
+                        // Return to login screen
+                        application.showLoginScreen();
+                    } else {
+                        showError("Error creating notebook: " + e.getMessage());
+                    }
                 }
             }
         });
@@ -391,31 +408,36 @@ public class MainInterface extends BorderPane {
     
     private void loadNotebooks() {
         try {
-            List<NotebookDto> notebooks = notebookService.getAllNotebooks();
-            
-            // Clear existing items
+            // Initialize the tree view with the root node
             notebookTree.setRoot(new TreeItem<>(new Pair<>("My Notebooks", null)));
             notebookTree.getRoot().setExpanded(true);
             
-            // Add notebooks to the tree
-            for (NotebookDto notebook : notebooks) {
-                notebooksMap.put(notebook.getId(), notebook);
+            try {
+                // Try to load notebooks
+                List<NotebookDto> notebooks = notebookService.getAllNotebooks();
                 
-                TreeItem<Pair<String, Long>> notebookItem = new TreeItem<>(new Pair<>(notebook.getTitle(), notebook.getId()));
-                notebookTree.getRoot().getChildren().add(notebookItem);
+                // Add notebooks to the tree
+                for (NotebookDto notebook : notebooks) {
+                    notebooksMap.put(notebook.getId(), notebook);
+                    
+                    TreeItem<Pair<String, Long>> notebookItem = new TreeItem<>(new Pair<>(notebook.getTitle(), notebook.getId()));
+                    notebookTree.getRoot().getChildren().add(notebookItem);
+                    
+                    // Load pages for this notebook
+                    loadPages(notebook.getId(), notebookItem);
+                }
+            } catch (Exception e) {
+                e.printStackTrace(); // Log the full stack trace
                 
-                // Load pages for this notebook
-                loadPages(notebook.getId(), notebookItem);
+                // Instead of showing an error, just log it and continue with an empty notebook tree
+                System.out.println("Note: No notebooks found or error loading notebooks. User can create new ones.");
+                
+                // Don't show error dialog as this might be a first-time user with no notebooks yet
+                // Just continue with an empty notebook tree
             }
         } catch (Exception e) {
-            e.printStackTrace(); // Log the full stack trace
-            
-            // Check if it's an authentication error
-            if (e.getMessage() != null && e.getMessage().contains("Authentication")) {
-                showError("Authentication error. Please restart the application and log in again.");
-            } else {
-                showError("Error loading notebooks: " + e.getMessage());
-            }
+            e.printStackTrace();
+            showError("Error initializing the application: " + e.getMessage());
         }
     }
     
