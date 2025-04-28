@@ -11,6 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 import jakarta.persistence.EntityNotFoundException;
 import com.notebook.dto.TableDto;
 import com.notebook.dto.GraphDto;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -85,29 +86,50 @@ public class PageService {
     }
 
     private PageDto convertToDto(Page page) {
+        // Initialize empty lists for tables and graphs
+        List<TableDto> tableDtos = new ArrayList<>();
+        List<GraphDto> graphDtos = new ArrayList<>();
+        
+        // Safely convert tables if they exist
+        if (page.getTables() != null) {
+            try {
+                tableDtos = page.getTables().stream()
+                    .map(table -> new TableDto(
+                        table.getId(),
+                        table.getData(),
+                        table.getCreatedAt()))
+                    .collect(Collectors.toList());
+            } catch (Exception e) {
+                System.err.println("Error converting tables: " + e.getMessage());
+                // Continue with empty tables list
+            }
+        }
+        
+        // Safely convert graphs if they exist
+        if (page.getGraphs() != null) {
+            try {
+                graphDtos = page.getGraphs().stream()
+                    .map(graph -> new GraphDto(
+                        graph.getId(),
+                        graph.getType().toString(),
+                        graph.getTableId(),
+                        graph.getConfig(),
+                        graph.getCreatedAt()))
+                    .collect(Collectors.toList());
+            } catch (Exception e) {
+                System.err.println("Error converting graphs: " + e.getMessage());
+                // Continue with empty graphs list
+            }
+        }
+        
         return PageDto.builder()
                 .id(page.getId())
                 .title(page.getTitle())
                 .content(page.getContent())
                 .createdAt(page.getCreatedAt())
-                .tables(page.getTables() != null ? 
-                    page.getTables().stream()
-                        .map(table -> new TableDto(
-                            table.getId(),
-                            table.getData(),
-                            table.getCreatedAt()))
-                        .collect(Collectors.toList()) : 
-                    null)
-                .graphs(page.getGraphs() != null ?
-                    page.getGraphs().stream()
-                        .map(graph -> new GraphDto(
-                            graph.getId(),
-                            graph.getType().toString(),
-                            graph.getTableId(),
-                            graph.getConfig(),
-                            graph.getCreatedAt()))
-                        .collect(Collectors.toList()) :
-                    null)
+                .tables(tableDtos)
+                .graphs(graphDtos)
+                .notebookId(page.getNotebook().getId())
                 .build();
     }
 }

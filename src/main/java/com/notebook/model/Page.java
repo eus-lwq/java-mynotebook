@@ -3,6 +3,7 @@ package com.notebook.model;
 import jakarta.persistence.*;
 import lombok.Data;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 @Data
@@ -26,11 +27,11 @@ public class Page {
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
-    @OneToMany(mappedBy = "page", cascade = CascadeType.ALL)
-    private List<DataTable> tables;
+    @OneToMany(mappedBy = "page", cascade = CascadeType.ALL, fetch = FetchType.EAGER)
+    private List<DataTable> tables = new ArrayList<>();
 
-    @OneToMany(mappedBy = "page", cascade = CascadeType.ALL)
-    private List<Graph> graphs;
+    @OneToMany(mappedBy = "page", cascade = CascadeType.ALL, fetch = FetchType.EAGER)
+    private List<Graph> graphs = new ArrayList<>();
 
     @PrePersist
     protected void onCreate() {

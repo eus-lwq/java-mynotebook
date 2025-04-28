@@ -18,4 +18,5 @@ public class PageDto {
     private LocalDateTime createdAt;
     private List<TableDto> tables;
     private List<GraphDto> graphs;
+    private Long notebookId;
 }
