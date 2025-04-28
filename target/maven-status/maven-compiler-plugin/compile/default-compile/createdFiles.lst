@@ -1,6 +1,7 @@
 com/notebook/config/DevAuthenticationProvider.class
 com/notebook/security/JwtAuthenticationFilter.class
 com/notebook/model/User.class
+com/notebook/model/Image.class
 com/notebook/service/TableService.class
 com/notebook/SimpleLauncher.class
 com/notebook/controller/PageController.class
@@ -10,6 +11,7 @@ com/notebook/controller/TableController.class
 com/notebook/ui/DebugLoginScreen.class
 com/notebook/service/PageService.class
 com/notebook/model/Page.class
+com/notebook/dto/ImageDto.class
 com/notebook/ui/NotebookUI.class
 com/notebook/model/User$Role.class
 com/notebook/StandaloneApplication.class
@@ -17,6 +19,7 @@ com/notebook/dto/NotebookDto$NotebookDtoBuilder.class
 com/notebook/dto/GraphDto$GraphDtoBuilder.class
 com/notebook/config/AuthTokenInterceptor.class
 com/notebook/ui/MainInterface.class
+com/notebook/repository/ImageRepository.class
 com/notebook/dto/AuthRequest.class
 com/notebook/dto/PageDto$PageDtoBuilder.class
 com/notebook/config/RestTemplateConfig.class
@@ -34,6 +37,7 @@ com/notebook/repository/GraphRepository.class
 com/notebook/dto/AuthResponse$AuthResponseBuilder.class
 com/notebook/model/Notebook.class
 com/notebook/ui/SimpleLauncher.class
+com/notebook/service/ImageService.class
 com/notebook/service/AuthService.class
 com/notebook/controller/AuthController.class
 com/notebook/repository/UserRepository.class
@@ -43,6 +47,7 @@ com/notebook/service/SecurityService.class
 com/notebook/dto/TableDto.class
 com/notebook/ui/RegistrationScreen.class
 com/notebook/model/Graph.class
+com/notebook/dto/ImageDto$ImageDtoBuilder.class
 com/notebook/NotebookApplication.class
 com/notebook/ui/MainInterface$1.class
 com/notebook/dto/PageDto.class

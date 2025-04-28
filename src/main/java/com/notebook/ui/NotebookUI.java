@@ -6,6 +6,8 @@ import com.notebook.service.AuthService;
 import com.notebook.service.NotebookService;
 import com.notebook.service.PageService;
 import com.notebook.service.SecurityService;
+import com.notebook.service.TableService;
+import com.notebook.service.ImageService;
 import javafx.scene.Scene;
 import javafx.scene.control.Alert;
 import javafx.scene.control.ButtonType;
@@ -43,6 +45,12 @@ public class NotebookUI {
     
     @Autowired
     private SecurityService securityService;
+    
+    @Autowired
+    private TableService tableService;
+    
+    @Autowired
+    private ImageService imageService;
 
     public void start(Stage primaryStage) {
         try {
@@ -114,7 +122,7 @@ public class NotebookUI {
     }
 
     public void showMainInterface() {
-        MainInterface mainInterface = new MainInterface(this, notebookService, pageService);
+        MainInterface mainInterface = new MainInterface(this, notebookService, pageService, tableService, imageService);
         rootLayout.setCenter(mainInterface);
     }
     

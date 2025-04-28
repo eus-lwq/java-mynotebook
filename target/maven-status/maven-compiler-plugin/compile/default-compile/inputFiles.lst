@@ -16,6 +16,7 @@
 /Users/tylerlwq/Downloads/java-final/src/main/java/com/notebook/config/DevSecurityConfig.java
 /Users/tylerlwq/Downloads/java-final/src/main/java/com/notebook/service/JwtService.java
 /Users/tylerlwq/Downloads/java-final/src/main/java/com/notebook/repository/GraphRepository.java
+/Users/tylerlwq/Downloads/java-final/src/main/java/com/notebook/model/Image.java
 /Users/tylerlwq/Downloads/java-final/src/main/java/com/notebook/controller/TableController.java
 /Users/tylerlwq/Downloads/java-final/src/main/java/com/notebook/ui/DebugLoginScreen.java
 /Users/tylerlwq/Downloads/java-final/src/main/java/com/notebook/security/JwtAuthenticationFilter.java
@@ -28,12 +29,15 @@
 /Users/tylerlwq/Downloads/java-final/src/main/java/com/notebook/dto/PageDto.java
 /Users/tylerlwq/Downloads/java-final/src/main/java/com/notebook/model/Page.java
 /Users/tylerlwq/Downloads/java-final/src/main/java/com/notebook/model/Graph.java
+/Users/tylerlwq/Downloads/java-final/src/main/java/com/notebook/service/ImageService.java
 /Users/tylerlwq/Downloads/java-final/src/main/java/com/notebook/ui/MainInterface.java
+/Users/tylerlwq/Downloads/java-final/src/main/java/com/notebook/repository/ImageRepository.java
 /Users/tylerlwq/Downloads/java-final/src/main/java/com/notebook/dto/AuthRequest.java
 /Users/tylerlwq/Downloads/java-final/src/main/java/com/notebook/repository/UserRepository.java
 /Users/tylerlwq/Downloads/java-final/src/main/java/com/notebook/controller/PageController.java
 /Users/tylerlwq/Downloads/java-final/src/main/java/com/notebook/ui/SimpleLauncher.java
 /Users/tylerlwq/Downloads/java-final/src/main/java/com/notebook/config/AuthTokenInterceptor.java
+/Users/tylerlwq/Downloads/java-final/src/main/java/com/notebook/dto/ImageDto.java
 /Users/tylerlwq/Downloads/java-final/src/main/java/com/notebook/dto/AuthResponse.java
 /Users/tylerlwq/Downloads/java-final/src/main/java/com/notebook/config/SecurityConfig.java
 /Users/tylerlwq/Downloads/java-final/src/main/java/com/notebook/controller/GraphController.java

@@ -2,13 +2,23 @@ package com.notebook.ui;
 
 import com.notebook.dto.NotebookDto;
 import com.notebook.dto.PageDto;
+import com.notebook.dto.TableDto;
+import com.notebook.dto.ImageDto;
 import com.notebook.service.NotebookService;
 import com.notebook.service.PageService;
+import com.notebook.service.TableService;
+import com.notebook.service.ImageService;
 
 import javafx.scene.control.*;
 import javafx.scene.layout.*;
 import javafx.geometry.Insets;
 import javafx.util.Pair;
+import javafx.stage.FileChooser;
+import javafx.stage.DirectoryChooser;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.nio.file.Files;
 
 import java.util.HashMap;
 import java.util.List;
@@ -19,6 +29,8 @@ public class MainInterface extends BorderPane {
     private final NotebookUI application;
     private final NotebookService notebookService;
     private final PageService pageService;
+    private final TableService tableService;
+    private final ImageService imageService;
     
     private final TreeView<Pair<String, Long>> notebookTree;
     private final TabPane editorTabs;
@@ -28,10 +40,12 @@ public class MainInterface extends BorderPane {
     private final Map<Long, PageDto> pagesMap = new HashMap<>();
     private final Map<Tab, Long> tabToPageIdMap = new HashMap<>();
 
-    public MainInterface(NotebookUI application, NotebookService notebookService, PageService pageService) {
+    public MainInterface(NotebookUI application, NotebookService notebookService, PageService pageService, TableService tableService, ImageService imageService) {
         this.application = application;
         this.notebookService = notebookService;
         this.pageService = pageService;
+        this.tableService = tableService;
+        this.imageService = imageService;
         
         // Initialize components
         notebookTree = createNotebookTree();
@@ -85,23 +99,28 @@ public class MainInterface extends BorderPane {
         tools.setPadding(new Insets(10));
         tools.setPrefWidth(200);
 
-        Button createTableBtn = new Button("Create Table");
-        createTableBtn.setMaxWidth(Double.MAX_VALUE);
-        createTableBtn.setOnAction(e -> handleCreateTable());
-
-        Button createGraphBtn = new Button("Create Graph");
-        createGraphBtn.setMaxWidth(Double.MAX_VALUE);
-        createGraphBtn.setOnAction(e -> handleCreateGraph());
-
-        Button exportBtn = new Button("Export");
-        exportBtn.setMaxWidth(Double.MAX_VALUE);
-        exportBtn.setOnAction(e -> handleExport());
-
+        Button createTableButton = new Button("Create Table");
+        createTableButton.setMaxWidth(Double.MAX_VALUE);
+        createTableButton.setOnAction(e -> handleCreateTable());
+        
+        Button createGraphButton = new Button("Create Graph");
+        createGraphButton.setMaxWidth(Double.MAX_VALUE);
+        createGraphButton.setOnAction(e -> handleCreateGraph());
+        
+        Button insertImageButton = new Button("Insert Image");
+        insertImageButton.setMaxWidth(Double.MAX_VALUE);
+        insertImageButton.setOnAction(e -> handleInsertImage());
+        
+        Button exportButton = new Button("Export");
+        exportButton.setMaxWidth(Double.MAX_VALUE);
+        exportButton.setOnAction(e -> handleExport());
+        
         tools.getChildren().addAll(
             new Label("Tools"),
-            createTableBtn,
-            createGraphBtn,
-            exportBtn
+            createTableButton,
+            createGraphButton,
+            insertImageButton,
+            exportButton
         );
 
         return tools;
@@ -323,10 +342,29 @@ public class MainInterface extends BorderPane {
                 
                 // Call service to create table
                 try {
-                    // This would need to be implemented in your TableService
-                    // TableDto newTable = tableService.createTable(pageId, data);
-                    showInfo("Table creation would be implemented here");
-                    // In a real implementation, you would refresh the page content
+                    TableDto newTable = tableService.createTable(pageId, data);
+                    
+                    // Get the current content
+                    PageDto page = pagesMap.get(pageId);
+                    String content = page.getContent();
+                    
+                    // Add table marker to the content
+                    String tableMarker = "\n[TABLE_" + newTable.getId() + "]\n";
+                    content += tableMarker;
+                    
+                    // Update the page content
+                    pageService.updatePage(pageId, page.getTitle(), content);
+                    
+                    // Refresh the page content in the UI
+                    if (selectedTab.getContent() instanceof TextArea) {
+                        TextArea textArea = (TextArea) selectedTab.getContent();
+                        textArea.setText(content);
+                    } else {
+                        // Re-open the page to refresh the content
+                        openPage(pageService.getPage(pageId));
+                    }
+                    
+                    showInfo("Table created successfully!");
                 } catch (Exception e) {
                     showError("Error creating table: " + e.getMessage());
                 }
@@ -391,6 +429,64 @@ public class MainInterface extends BorderPane {
         });
     }
 
+    private void handleInsertImage() {
+        Tab selectedTab = editorTabs.getSelectionModel().getSelectedItem();
+        if (selectedTab == null || !tabToPageIdMap.containsKey(selectedTab)) {
+            showError("Please open a page first");
+            return;
+        }
+        
+        Long pageId = tabToPageIdMap.get(selectedTab);
+        
+        // Create a file chooser for images
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Select Image");
+        fileChooser.getExtensionFilters().addAll(
+            new FileChooser.ExtensionFilter("Image Files", "*.png", "*.jpg", "*.jpeg", "*.gif")
+        );
+        
+        // Show open file dialog
+        File selectedFile = fileChooser.showOpenDialog(getScene().getWindow());
+        
+        if (selectedFile != null) {
+            try {
+                // Read the image file
+                byte[] imageData = Files.readAllBytes(selectedFile.toPath());
+                String fileName = selectedFile.getName();
+                String contentType = Files.probeContentType(selectedFile.toPath());
+                
+                // Save the image
+                ImageDto newImage = imageService.saveImage(pageId, imageData, fileName, contentType);
+                
+                // Get the current content
+                PageDto page = pagesMap.get(pageId);
+                String content = page.getContent();
+                
+                // Add image marker to the content
+                String imageMarker = "\n[IMAGE_" + newImage.getId() + "]\n";
+                content += imageMarker;
+                
+                // Update the page content
+                pageService.updatePage(pageId, page.getTitle(), content);
+                
+                // Refresh the page content in the UI
+                if (selectedTab.getContent() instanceof TextArea) {
+                    TextArea textArea = (TextArea) selectedTab.getContent();
+                    textArea.setText(content);
+                } else {
+                    // Re-open the page to refresh the content
+                    openPage(pageService.getPage(pageId));
+                }
+                
+                showInfo("Image inserted successfully!");
+            } catch (IOException e) {
+                showError("Error reading image file: " + e.getMessage());
+            } catch (Exception e) {
+                showError("Error inserting image: " + e.getMessage());
+            }
+        }
+    }
+
     private void handleExport() {
         Tab selectedTab = editorTabs.getSelectionModel().getSelectedItem();
         if (selectedTab == null || !tabToPageIdMap.containsKey(selectedTab)) {
@@ -398,12 +494,77 @@ public class MainInterface extends BorderPane {
             return;
         }
         
-        // @ TODO: export functionality
-        showInfo("Export functionality would be implemented here");
-        // In a real implementation, you would:
-        // 1. Get the page content
-        // 2. Convert to desired format (PDF, HTML, etc.)
-        // 3. Save to file using a FileChooser
+        Long pageId = tabToPageIdMap.get(selectedTab);
+        PageDto page = pagesMap.get(pageId);
+        
+        if (page == null) {
+            showError("Page data not found");
+            return;
+        }
+        
+        // Create a directory chooser
+        DirectoryChooser directoryChooser = new DirectoryChooser();
+        directoryChooser.setTitle("Select Export Directory");
+        
+        // Show directory dialog
+        File selectedDirectory = directoryChooser.showDialog(getScene().getWindow());
+        
+        if (selectedDirectory != null) {
+            try {
+                // Create export filename based on page title
+                String sanitizedTitle = page.getTitle().replaceAll("[^a-zA-Z0-9.-]", "_");
+                String exportPath = selectedDirectory.getAbsolutePath() + File.separator + sanitizedTitle + ".html";
+                
+                // Generate HTML content
+                StringBuilder html = new StringBuilder();
+                html.append("<!DOCTYPE html>\n");
+                html.append("<html>\n");
+                html.append("<head>\n");
+                html.append("  <title>").append(page.getTitle()).append("</title>\n");
+                html.append("  <style>\n");
+                html.append("    body { font-family: Arial, sans-serif; margin: 20px; }\n");
+                html.append("    h1 { color: #333; }\n");
+                html.append("    .content { line-height: 1.6; }\n");
+                html.append("    .table-placeholder { background-color: #f0f0f0; padding: 10px; margin: 10px 0; border-radius: 5px; }\n");
+                html.append("    .image-placeholder { background-color: #e0e0e0; padding: 10px; margin: 10px 0; border-radius: 5px; }\n");
+                html.append("  </style>\n");
+                html.append("</head>\n");
+                html.append("<body>\n");
+                html.append("  <h1>").append(page.getTitle()).append("</h1>\n");
+                html.append("  <div class=\"content\">\n");
+                
+                // Process content to handle table and image markers
+                String content = page.getContent();
+                String[] lines = content.split("\\n");
+                
+                for (String line : lines) {
+                    if (line.matches("\\[TABLE_\\d+\\]")) {
+                        // Extract table ID
+                        String tableIdStr = line.substring(7, line.length() - 1);
+                        html.append("    <div class=\"table-placeholder\">Table " + tableIdStr + " would be rendered here</div>\n");
+                    } else if (line.matches("\\[IMAGE_\\d+\\]")) {
+                        // Extract image ID
+                        String imageIdStr = line.substring(7, line.length() - 1);
+                        html.append("    <div class=\"image-placeholder\">Image " + imageIdStr + " would be rendered here</div>\n");
+                    } else {
+                        html.append("    ").append(line).append("<br>\n");
+                    }
+                }
+                
+                html.append("  </div>\n");
+                html.append("</body>\n");
+                html.append("</html>");
+                
+                // Write to file
+                try (FileOutputStream fos = new FileOutputStream(exportPath)) {
+                    fos.write(html.toString().getBytes());
+                }
+                
+                showInfo("Page exported successfully to: " + exportPath);
+            } catch (Exception e) {
+                showError("Error exporting page: " + e.getMessage());
+            }
+        }
     }
     
     private void loadNotebooks() {
