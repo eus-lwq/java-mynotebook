@@ -680,6 +680,102 @@ public class MainInterface extends BorderPane {
         }
     }
 
+    /**
+     * Extracts table data from a GridPane and returns it as a 2D string array
+     * @param grid The GridPane containing the table data
+     * @return A 2D string array containing the table data
+     */
+    private String[][] extractTableDataFromGrid(GridPane grid) {
+        // Determine the dimensions of the grid
+        int rowCount = 0;
+        int colCount = 0;
+        
+        for (Node child : grid.getChildren()) {
+            Integer row = GridPane.getRowIndex(child);
+            Integer col = GridPane.getColumnIndex(child);
+            
+            if (row != null && row + 1 > rowCount) {
+                rowCount = row + 1;
+            }
+            
+            if (col != null && col + 1 > colCount) {
+                colCount = col + 1;
+            }
+        }
+        
+        // Create a data array of the right size
+        String[][] data = new String[rowCount][colCount];
+        
+        // Initialize with empty strings
+        for (int i = 0; i < rowCount; i++) {
+            for (int j = 0; j < colCount; j++) {
+                data[i][j] = "";
+            }
+        }
+        
+        // Fill in the data from the grid
+        for (Node child : grid.getChildren()) {
+            if (child instanceof TextField) {
+                TextField cell = (TextField) child;
+                Integer row = GridPane.getRowIndex(child);
+                Integer col = GridPane.getColumnIndex(child);
+                
+                if (row != null && col != null) {
+                    data[row][col] = cell.getText();
+                }
+            }
+        }
+        
+        return data;
+    }
+    
+    /**
+     * Saves all table data from the UI before export
+     * @param contentBox The VBox containing the page content
+     * @return true if any tables were saved, false otherwise
+     */
+    private boolean saveAllTableData(VBox contentBox) {
+        boolean tablesSaved = false;
+        
+        // Iterate through all children in the content box
+        for (Node node : contentBox.getChildren()) {
+            // Look for table containers
+            if (node instanceof VBox) {
+                VBox container = (VBox) node;
+                
+                // Check if this container has a table label and grid
+                if (container.getChildren().size() >= 2 && 
+                    container.getChildren().get(0) instanceof Label &&
+                    container.getChildren().get(1) instanceof GridPane) {
+                    
+                    Label tableLabel = (Label) container.getChildren().get(0);
+                    GridPane tableGrid = (GridPane) container.getChildren().get(1);
+                    
+                    // Extract table ID from the label (format: "Table X")
+                    String labelText = tableLabel.getText();
+                    if (labelText.startsWith("Table ")) {
+                        try {
+                            Long tableId = Long.parseLong(labelText.substring(6).trim());
+                            
+                            // Extract data from the GridPane
+                            String[][] tableData = extractTableDataFromGrid(tableGrid);
+                            
+                            // Save the table data to the database
+                            TableDto updatedTable = tableService.updateTable(tableId, tableData);
+                            System.out.println("Saved table data for table ID: " + tableId);
+                            tablesSaved = true;
+                        } catch (Exception e) {
+                            System.out.println("Error saving table data: " + e.getMessage());
+                            e.printStackTrace();
+                        }
+                    }
+                }
+            }
+        }
+        
+        return tablesSaved;
+    }
+
     private void handleExport() {
         Tab selectedTab = editorTabs.getSelectionModel().getSelectedItem();
         if (selectedTab == null || !tabToPageIdMap.containsKey(selectedTab)) {
@@ -696,6 +792,12 @@ public class MainInterface extends BorderPane {
             if (scrollPane != null && scrollPane.getContent() instanceof VBox) {
                 VBox contentBox = (VBox) scrollPane.getContent();
                 System.out.println("Content box children: " + contentBox.getChildren().size());
+                
+                // Save all table data from the UI before export
+                boolean tablesSaved = saveAllTableData(contentBox);
+                if (tablesSaved) {
+                    System.out.println("Successfully saved table data from UI before export");
+                }
                 
                 // Recursively search for the TextArea
                 editor = findTextArea(contentBox);
@@ -856,10 +958,79 @@ public class MainInterface extends BorderPane {
                         "<empty>"));
                 
                 // Also log any table or image markers in the content
+                boolean foundTableMarkers = false;
+                boolean foundImageMarkers = false;
                 if (content != null) {
                     for (String line : lines) {
-                        if (line.matches("\\[TABLE_\\d+\\]") || line.matches("\\[IMAGE_\\d+\\]")) {
-                            System.out.println("Found marker in content: " + line);
+                        if (line.matches("\\[TABLE_\\d+\\]")) {
+                            foundTableMarkers = true;
+                            System.out.println("Found table marker in content: " + line);
+                        } else if (line.matches("\\[IMAGE_\\d+\\]")) {
+                            foundImageMarkers = true;
+                            System.out.println("Found image marker in content: " + line);
+                        }
+                    }
+                }
+                
+                // If no table markers were found in the content but the page has tables,
+                // add markers to the content so they'll be included in the export
+                if (!foundTableMarkers && page.getTables() != null && !page.getTables().isEmpty()) {
+                    System.out.println("No table markers found in content, but page has " + page.getTables().size() + " tables. Adding markers.");
+                    StringBuilder contentWithMarkers = new StringBuilder(content);
+                    
+                    for (TableDto table : page.getTables()) {
+                        String tableMarker = "\n[TABLE_" + table.getId() + "]\n";
+                        contentWithMarkers.append(tableMarker);
+                        System.out.println("Added marker for table: " + table.getId());
+                    }
+                    
+                    content = contentWithMarkers.toString();
+                    lines = content.split("\\n");
+                }
+                
+                // For images, we need to scan the UI to find any image markers that might be missing
+                if (!foundImageMarkers) {
+                    // Since PageDto doesn't have an images field, we need to look for image markers in the UI
+                    // This is a workaround since we can't directly access the images from the PageDto
+                    System.out.println("No image markers found in content. Looking for images in the UI...");
+                    
+                    // Find the current tab's content
+                    ScrollPane scrollPane = (ScrollPane) selectedTab.getContent();
+                    if (scrollPane != null && scrollPane.getContent() instanceof VBox) {
+                        VBox contentBox = (VBox) scrollPane.getContent();
+                        
+                        // Look for image containers in the UI
+                        StringBuilder contentWithMarkers = new StringBuilder(content);
+                        boolean foundImagesInUI = false;
+                        
+                        for (Node node : contentBox.getChildren()) {
+                            if (node instanceof VBox) {
+                                VBox container = (VBox) node;
+                                
+                                // Check if this is an image container
+                                if (container.getChildren().size() >= 2 && 
+                                    container.getChildren().get(0) instanceof Label &&
+                                    container.getChildren().get(1) instanceof ImageView) {
+                                    
+                                    Label imageLabel = (Label) container.getChildren().get(0);
+                                    String labelText = imageLabel.getText();
+                                    
+                                    // Extract image ID if possible
+                                    if (labelText.startsWith("Image: ")) {
+                                        // Try to find image ID in the label text or elsewhere
+                                        System.out.println("Found image in UI: " + labelText);
+                                        foundImagesInUI = true;
+                                        
+                                        // Since we can't reliably get the image ID from the UI,
+                                        // we'll need to rely on the content markers that were added when the image was inserted
+                                    }
+                                }
+                            }
+                        }
+                        
+                        if (foundImagesInUI) {
+                            System.out.println("Found images in UI, but couldn't add markers automatically.");
+                            System.out.println("Please make sure image markers ([IMAGE_id]) are preserved in the text editor.");
                         }
                     }
                 }
@@ -1050,6 +1221,33 @@ public class MainInterface extends BorderPane {
         try {
             PageDto page = pagesMap.get(pageId);
             if (page != null) {
+                // Check if the content might be missing table or image markers
+                boolean foundTableMarkers = false;
+                boolean foundImageMarkers = false;
+                String[] lines = content.split("\n");
+                
+                for (String line : lines) {
+                    if (line.matches("\\[TABLE_\\d+\\]")) {
+                        foundTableMarkers = true;
+                    } else if (line.matches("\\[IMAGE_\\d+\\]")) {
+                        foundImageMarkers = true;
+                    }
+                }
+                
+                // If the page has tables but no table markers in the content, preserve the markers
+                if (!foundTableMarkers && page.getTables() != null && !page.getTables().isEmpty()) {
+                    System.out.println("Preserving table markers in content");
+                    StringBuilder preservedContent = new StringBuilder(content);
+                    
+                    for (TableDto table : page.getTables()) {
+                        String tableMarker = "\n[TABLE_" + table.getId() + "]\n";
+                        preservedContent.append(tableMarker);
+                        System.out.println("Preserved marker for table: " + table.getId());
+                    }
+                    
+                    content = preservedContent.toString();
+                }
+                
                 // Update the page content
                 PageDto updatedPage = pageService.updatePage(pageId, page.getTitle(), content);
                 if (updatedPage != null) {
