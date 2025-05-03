@@ -112,10 +112,6 @@ public class MainInterface extends BorderPane {
         createTableButton.setMaxWidth(Double.MAX_VALUE);
         createTableButton.setOnAction(e -> handleCreateTable());
         
-        Button createGraphButton = new Button("Create Graph");
-        createGraphButton.setMaxWidth(Double.MAX_VALUE);
-        createGraphButton.setOnAction(e -> handleCreateGraph());
-        
         Button insertImageButton = new Button("Insert Image");
         insertImageButton.setMaxWidth(Double.MAX_VALUE);
         insertImageButton.setOnAction(e -> handleInsertImage());
@@ -127,7 +123,6 @@ public class MainInterface extends BorderPane {
         tools.getChildren().addAll(
             new Label("Tools"),
             createTableButton,
-            createGraphButton,
             insertImageButton,
             exportButton
         );
@@ -171,35 +166,56 @@ public class MainInterface extends BorderPane {
     private void openPage(PageDto page) {
         // Debug information
         System.out.println("Opening page: " + page.getId() + " - " + page.getTitle());
-        System.out.println("Page content: " + page.getContent());
+        System.out.println("Initial page content: " + page.getContent());
         
         // Get the latest page data
         final Long pageId = page.getId();
-        PageDto finalPage = page; // Default to original page
+        PageDto tempPage = page;
         try {
-            PageDto refreshedPage = pageService.getPage(pageId);
-            finalPage = refreshedPage; // Only assign if successful
+            tempPage = pageService.getPage(pageId);
             System.out.println("Successfully refreshed page data");
-        } catch (Exception e) {
-            System.out.println("Error refreshing page data: " + e.getMessage());
-            // Keep using the original page if refresh fails
-        }
-        
-        // Debug table information
-        if (finalPage.getTables() != null) {
-            System.out.println("Tables count: " + finalPage.getTables().size());
-            for (TableDto table : finalPage.getTables()) {
-                System.out.println("Table ID: " + table.getId());
-                String[][] data = table.getData();
-                if (data != null) {
-                    System.out.println("Table data dimensions: " + data.length + "x" + (data.length > 0 ? data[0].length : 0));
-                } else {
-                    System.out.println("Table data is null");
+            
+            // Debug table information
+            if (tempPage.getTables() != null) {
+                System.out.println("Tables count: " + tempPage.getTables().size());
+                for (TableDto table : tempPage.getTables()) {
+                    System.out.println("Table ID: " + table.getId());
+                    String[][] data = table.getData();
+                    if (data != null) {
+                        System.out.println("Table data dimensions: " + data.length + "x" + (data.length > 0 ? data[0].length : 0));
+                    }
+                }
+                
+                // Ensure table markers are present in content
+                String content = tempPage.getContent();
+                boolean hasTableMarkers = false;
+                if (content != null) {
+                    for (String line : content.split("\n")) {
+                        if (line.trim().matches("\\[TABLE_\\d+\\]")) {
+                            hasTableMarkers = true;
+                            break;
+                        }
+                    }
+                }
+                
+                if (!hasTableMarkers) {
+                    System.out.println("Adding missing table markers to content");
+                    StringBuilder contentWithMarkers = new StringBuilder(content != null ? content : "");
+                    for (TableDto table : tempPage.getTables()) {
+                        contentWithMarkers.append("\n[TABLE_").append(table.getId()).append("]\n");
+                    }
+                    // Update the page with the new content
+                    tempPage = pageService.updatePage(pageId, tempPage.getTitle(), contentWithMarkers.toString());
+                    System.out.println("Updated page content with table markers");
                 }
             }
-        } else {
-            System.out.println("Tables collection is null");
+        } catch (Exception e) {
+            System.out.println("Error refreshing page data: " + e.getMessage());
+            e.printStackTrace();
         }
+        
+        // Create final reference for use in lambda
+        final PageDto finalPage = tempPage;
         
         // Check if page is already open
         for (Tab tab : editorTabs.getTabs()) {
@@ -224,22 +240,55 @@ public class MainInterface extends BorderPane {
         final Button saveButton = new Button("Save");
         final TextArea editor = new TextArea(finalPage.getContent());
         editor.setWrapText(true);
-        saveButton.setOnAction(e -> savePage(pageId, editor.getText()));
+        saveButton.setOnAction(e -> {
+            // First save all table data from the UI
+            saveAllTableData(pageContent);
+            
+            // Get current content from editor
+            String currentContent = editor.getText();
+            
+            // Ensure table markers are present
+            if (finalPage.getTables() != null && !finalPage.getTables().isEmpty()) {
+                boolean hasTableMarkers = false;
+                for (String line : currentContent.split("\n")) {
+                    if (line.trim().matches("\\[TABLE_\\d+\\]")) {
+                        hasTableMarkers = true;
+                        break;
+                    }
+                }
+                
+                if (!hasTableMarkers) {
+                    // Add table markers if they're missing
+                    StringBuilder contentWithMarkers = new StringBuilder(currentContent);
+                    for (TableDto table : finalPage.getTables()) {
+                        contentWithMarkers.append("\n[TABLE_").append(table.getId()).append("]\n");
+                    }
+                    currentContent = contentWithMarkers.toString();
+                    // Update the editor with the new content
+                    editor.setText(currentContent);
+                }
+            }
+            
+            // Save the page with the updated content
+            savePage(pageId, currentContent);
+        });
         
         // Add the editor and save button to the page content
         pageContent.getChildren().addAll(saveButton, editor);
         
         // Process the content to find table and image markers
         final String content = finalPage.getContent();
+        System.out.println("Page content: " + content);
         if (content != null && !content.isEmpty()) {
             String[] lines = content.split("\\n");
             
             for (String line : lines) {
+                String trimmedLine = line.trim();
+                System.out.println("Processing line: '" + line + "'");
                 // Process table markers
-                if (line.matches("\\[TABLE_\\d+\\]")) {
+                if (trimmedLine.matches("\\[TABLE_\\d+\\]")) {
                     try {
-                        // Extract table ID
-                        final Long tableId = Long.parseLong(line.substring(7, line.length() - 1));
+                        final Long tableId = Long.parseLong(trimmedLine.substring(7, trimmedLine.length() - 1));
                         System.out.println("Found table marker for ID: " + tableId);
                         
                         // Get the table from the service
@@ -254,24 +303,33 @@ public class MainInterface extends BorderPane {
                             tableGrid.setVgap(5);
                             tableGrid.setPadding(new Insets(10));
                             tableGrid.setStyle("-fx-border-color: #cccccc; -fx-background-color: #f5f5f5;");
+                            System.out.println("Created GridPane for table");
                             
                             // Get table data
                             final String[][] data = tableDto.getData();
                             if (data != null && data.length > 0) {
+                                System.out.println("Table data array dimensions: " + data.length + "x" + data[0].length);
                                 for (int row = 0; row < data.length; row++) {
                                     for (int col = 0; col < data[row].length; col++) {
-                                        final TextField cell = new TextField(data[row][col]);
+                                        String cellValue = data[row][col] != null ? data[row][col] : "";
+                                        System.out.println("Creating cell [" + row + "][" + col + "] with value: '" + cellValue + "'");
+                                        final TextField cell = new TextField(cellValue);
                                         cell.setPrefWidth(100);
                                         tableGrid.add(cell, col, row);
                                     }
                                 }
+                                System.out.println("Finished adding all cells to GridPane");
                             }
                             
                             // Add the table to the page content
                             final VBox tableContainer = new VBox(5);
                             final Label tableLabel = new Label("Table " + tableDto.getId());
                             tableContainer.getChildren().addAll(tableLabel, tableGrid);
+                            tableContainer.setStyle("-fx-background-color: #f0f0f0; -fx-border-color: #999999; -fx-border-width: 1px;");
+                            System.out.println("Created table container with label and grid");
+                            
                             pageContent.getChildren().add(tableContainer);
+                            System.out.println("Added table container to pageContent. Total children: " + pageContent.getChildren().size());
                         }
                     } catch (Exception e) {
                         System.out.println("Error rendering table: " + e.getMessage());
@@ -494,9 +552,11 @@ public class MainInterface extends BorderPane {
                     PageDto page = pagesMap.get(pageId);
                     String content = page.getContent();
                     
-                    // Add table marker to the content
+                    // Add table marker to the content if not already present
                     String tableMarker = "\n[TABLE_" + newTable.getId() + "]\n";
-                    content += tableMarker;
+                    if (content == null || !content.contains(tableMarker.trim())) {
+                        content += tableMarker;
+                    }
                     
                     // Update the page content
                     pageService.updatePage(pageId, page.getTitle(), content);
@@ -517,6 +577,7 @@ public class MainInterface extends BorderPane {
                             // Populate the table grid
                             for (int row = 0; row < data.length; row++) {
                                 for (int col = 0; col < data[row].length; col++) {
+                                    System.out.println("Cell [" + row + "][" + col + "] value: '" + data[row][col] + "'");
                                     TextField cell = new TextField(data[row][col]);
                                     cell.setPrefWidth(100);
                                     tableGrid.add(cell, col, row);
@@ -527,7 +588,9 @@ public class MainInterface extends BorderPane {
                             VBox tableContainer = new VBox(5);
                             Label tableLabel = new Label("Table " + newTable.getId());
                             tableContainer.getChildren().addAll(tableLabel, tableGrid);
+                            tableContainer.setStyle("-fx-background-color: yellow;");
                             pageContent.getChildren().add(tableContainer);
+                            System.out.println("Added table container to pageContent. Children count: " + pageContent.getChildren().size());
                         } else {
                             // If the content structure is unexpected, refresh the page
                             openPage(pageService.getPage(pageId));
@@ -542,63 +605,6 @@ public class MainInterface extends BorderPane {
                     showError("Error creating table: " + e.getMessage());
                     e.printStackTrace();
                 }
-            }
-        });
-    }
-
-    private void handleCreateGraph() {
-        Tab selectedTab = editorTabs.getSelectionModel().getSelectedItem();
-        if (selectedTab == null || !tabToPageIdMap.containsKey(selectedTab)) {
-            showError("Please open a page first");
-            return;
-        }
-        
-        Long pageId = tabToPageIdMap.get(selectedTab);
-        
-        // Simple dialog for graph type
-        Dialog<String> dialog = new Dialog<>();
-        dialog.setTitle("Create Graph");
-        dialog.setHeaderText("Select graph type");
-        
-        // Set the button types
-        ButtonType createButtonType = new ButtonType("Create", ButtonBar.ButtonData.OK_DONE);
-        dialog.getDialogPane().getButtonTypes().addAll(createButtonType, ButtonType.CANCEL);
-        
-        // Create the type chooser
-        GridPane grid = new GridPane();
-        grid.setHgap(10);
-        grid.setVgap(10);
-        grid.setPadding(new Insets(20, 150, 10, 10));
-        
-        ComboBox<String> typeComboBox = new ComboBox<>();
-        typeComboBox.getItems().addAll("BAR", "LINE", "PIE");
-        typeComboBox.setValue("BAR");
-        
-        grid.add(new Label("Graph Type:"), 0, 0);
-        grid.add(typeComboBox, 1, 0);
-        
-        dialog.getDialogPane().setContent(grid);
-        
-        // Convert the result when the create button is clicked
-        dialog.setResultConverter(dialogButton -> {
-            if (dialogButton == createButtonType) {
-                return typeComboBox.getValue();
-            }
-            return null;
-        });
-        
-        Optional<String> result = dialog.showAndWait();
-        
-        result.ifPresent(type -> {
-            // Call service to create graph
-            try {
-                // This would need to be implemented in your GraphService
-                // First would need to select a table
-                // GraphDto newGraph = graphService.createGraph(pageId, type, tableId, config);
-                showInfo("Graph creation would be implemented here");
-                // In a real implementation, you would refresh the page content
-            } catch (Exception e) {
-                showError("Error creating graph: " + e.getMessage());
             }
         });
     }
@@ -962,7 +968,7 @@ public class MainInterface extends BorderPane {
                 boolean foundImageMarkers = false;
                 if (content != null) {
                     for (String line : lines) {
-                        if (line.matches("\\[TABLE_\\d+\\]")) {
+                        if (line.trim().matches("\\[TABLE_\\d+\\]")) {
                             foundTableMarkers = true;
                             System.out.println("Found table marker in content: " + line);
                         } else if (line.matches("\\[IMAGE_\\d+\\]")) {
@@ -1044,11 +1050,11 @@ public class MainInterface extends BorderPane {
                 
                 // Process tables
                 for (String line : lines) {
-                    if (line.matches("\\[TABLE_\\d+\\]")) {
+                    if (line.trim().matches("\\[TABLE_\\d+\\]")) {
                         try {
                             // Extract table ID
-                            String tableIdStr = line.substring(7, line.length() - 1);
-                            Long tableId = Long.parseLong(tableIdStr);
+                            String trimmedLine = line.trim();
+                            final Long tableId = Long.parseLong(trimmedLine.substring(7, trimmedLine.length() - 1));
                             System.out.println("Processing table ID: " + tableId);
                             
                             // Get the table from the service
@@ -1088,8 +1094,8 @@ public class MainInterface extends BorderPane {
                             }
                         } catch (Exception e) {
                             e.printStackTrace();
-                            String tableIdStr = line.substring(7, line.length() - 1);
-                            html.append("    <div class=\"table-placeholder\">Error loading Table " + tableIdStr + ": " + e.getMessage() + "</div>\n");
+                            String trimmedLine = line.trim();
+                            html.append("    <div class=\"table-placeholder\">Error loading Table " + trimmedLine + ": " + e.getMessage() + "</div>\n");
                         }
                     }
                 }
@@ -1099,8 +1105,8 @@ public class MainInterface extends BorderPane {
                     if (line.matches("\\[IMAGE_\\d+\\]")) {
                         try {
                             // Extract image ID
-                            String imageIdStr = line.substring(7, line.length() - 1);
-                            Long imageId = Long.parseLong(imageIdStr);
+                            String trimmedLine = line.trim();
+                            final Long imageId = Long.parseLong(trimmedLine.substring(7, trimmedLine.length() - 1));
                             System.out.println("Processing image ID: " + imageId);
                             
                             // Get the image from the service
@@ -1130,8 +1136,8 @@ public class MainInterface extends BorderPane {
                             }
                         } catch (Exception e) {
                             e.printStackTrace();
-                            String imageIdStr = line.substring(7, line.length() - 1);
-                            html.append("    <div class=\"image-placeholder\">Error loading Image " + imageIdStr + ": " + e.getMessage() + "</div>\n");
+                            String trimmedLine = line.trim();
+                            html.append("    <div class=\"image-placeholder\">Error loading Image " + trimmedLine + ": " + e.getMessage() + "</div>\n");
                         }
                     }
                 }
@@ -1221,44 +1227,50 @@ public class MainInterface extends BorderPane {
         try {
             PageDto page = pagesMap.get(pageId);
             if (page != null) {
+                System.out.println("Saving page " + pageId + " with content length: " + (content != null ? content.length() : 0));
+                
                 // Check if the content might be missing table or image markers
                 boolean foundTableMarkers = false;
-                boolean foundImageMarkers = false;
                 String[] lines = content.split("\n");
                 
+                // First check for existing table markers
                 for (String line : lines) {
-                    if (line.matches("\\[TABLE_\\d+\\]")) {
+                    if (line.trim().matches("\\[TABLE_\\d+\\]")) {
+                        System.out.println("Found existing table marker: " + line.trim());
                         foundTableMarkers = true;
-                    } else if (line.matches("\\[IMAGE_\\d+\\]")) {
-                        foundImageMarkers = true;
                     }
                 }
                 
-                // If the page has tables but no table markers in the content, preserve the markers
+                // If the page has tables but no table markers in the content, add the markers
                 if (!foundTableMarkers && page.getTables() != null && !page.getTables().isEmpty()) {
-                    System.out.println("Preserving table markers in content");
+                    System.out.println("No table markers found. Adding markers for " + page.getTables().size() + " tables");
                     StringBuilder preservedContent = new StringBuilder(content);
                     
                     for (TableDto table : page.getTables()) {
                         String tableMarker = "\n[TABLE_" + table.getId() + "]\n";
                         preservedContent.append(tableMarker);
-                        System.out.println("Preserved marker for table: " + table.getId());
+                        System.out.println("Added marker for table: " + table.getId());
                     }
                     
                     content = preservedContent.toString();
                 }
                 
                 // Update the page content
+                System.out.println("Saving final content: " + content);
                 PageDto updatedPage = pageService.updatePage(pageId, page.getTitle(), content);
                 if (updatedPage != null) {
                     // Update the cached page
                     pagesMap.put(pageId, updatedPage);
+                    System.out.println("Page saved successfully with " + 
+                        (updatedPage.getTables() != null ? updatedPage.getTables().size() : 0) + " tables");
                     showInfo("Page saved successfully");
                 } else {
                     showError("Failed to save page");
                 }
             }
         } catch (Exception e) {
+            System.out.println("Error saving page: " + e.getMessage());
+            e.printStackTrace();
             showError("Error saving page: " + e.getMessage());
         }
     }
